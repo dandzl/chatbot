@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>BTC Chart</title>
+  </head>
+  <body>
+    <!-- TradingView Widget BEGIN -->
+    <div class="tradingview-widget-container">
+      <div id="tradingview_btc"></div>
+    </div>
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script type="text/javascript">
+      new TradingView.widget({
+        width: 800,
+        height: 600,
+        symbol: "BINANCE:BTCUSDT",
+        interval: "D",
+        range: "12M",
+        theme: "light",
+        style: "1",
+        timezone: "Etc/UTC",
+        container_id: "tradingview_btc"
+      });
+    </script>
+    <!-- TradingView Widget END -->
+  </body>
+</html>
