@@ -413,10 +413,77 @@
       setInterval(updateMarketData, 10000);
     </script>
     <script>
+      // Initialize canvas for heatmap overlay
+      const canvas = document.createElement('canvas');
+      canvas.id = 'heatmapOverlay';
+      canvas.style.position = 'absolute';
+      canvas.style.top = '0';
+      canvas.style.left = '0';
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.style.pointerEvents = 'none';
+      
+      // Initialize order book state
+      const orderBook = {
+        asks: new Map(),
+        bids: new Map(),
+        timeData: new Map(),
+        maxVolume: 0
+      };
+      
+      function renderHeatmap() {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Get current price from TradingView widget
+        const currentPrice = parseFloat(document.querySelector('[data-name="legend-price-value"]')?.textContent) || 0;
+        const priceRange = currentPrice * 0.1; // 10% range
+        
+        // Calculate volume ranges for color scaling
+        const volumes = Array.from(orderBook.timeData.values());
+        const maxVolume = Math.max(...volumes, 1);
+        orderBook.maxVolume = Math.max(orderBook.maxVolume, maxVolume);
+        
+        // Draw heatmap
+        orderBook.timeData.forEach((volume, key) => {
+          const [timestamp, price] = key.split('_').map(Number);
+          const age = Date.now() - timestamp;
+          const alpha = Math.max(0, 1 - age / (5 * 60 * 1000)); // Fade over 5 minutes
+          
+          // Calculate relative position
+          const relativePrice = (price - currentPrice) / priceRange;
+          const y = canvas.height * (0.5 - relativePrice * 0.5);
+          
+          // Calculate color intensity based on volume
+          const intensity = Math.log(volume + 1) / Math.log(orderBook.maxVolume + 1);
+          const color = price >= currentPrice ? 
+            `rgba(255,0,0,${alpha * intensity})` : 
+            `rgba(0,255,0,${alpha * intensity})`;
+          
+          // Draw volume bar
+          ctx.fillStyle = color;
+          ctx.fillRect(0, y, canvas.width, 2);
+        });
+      }
+
       // Initialize everything when DOM is ready
       document.addEventListener('DOMContentLoaded', () => {
         console.log('DOM Content loaded, initializing...');
-        initOrderBook();
+        
+        // Add canvas overlay to chart container
+        const chartContainer = document.querySelector('#tradingview_btc').parentElement;
+        chartContainer.appendChild(canvas);
+        
+        // Resize canvas to match container
+        const resizeCanvas = () => {
+          canvas.width = chartContainer.clientWidth;
+          canvas.height = chartContainer.clientHeight;
+        };
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Start data polling
+        pollOrderBook();
         updateMarketData();
         
         // Set up polling intervals
