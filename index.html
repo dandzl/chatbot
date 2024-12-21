@@ -14,15 +14,14 @@
     </div>
 
     <!-- Chart Container BEGIN -->
-    <div style="position: relative; width: 800px; height: 600px;">
+    <div style="display: flex; flex-direction: column; gap: 20px; padding: 20px;">
       <!-- TradingView Widget BEGIN -->
-      <div id="tradingview_btc" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+      <div style="width: 100%; height: 600px;">
+        <div id="tradingview_btc" style="width: 100%; height: 100%;"></div>
+      </div>
       <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
       <script type="text/javascript">
         let tvWidget;
-        let chartReady = false;
-        let lastPrice = 0;
-        let priceRange = { min: 0, max: 0 };
 
         tvWidget = new TradingView.widget({
           autosize: true,
@@ -55,18 +54,17 @@
       </script>
       <!-- TradingView Widget END -->
       
-      <!-- Heatmap Overlay BEGIN -->
-      <canvas id="heatmapCanvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+      <!-- Coinglass Heatmap BEGIN -->
+      <div style="width: 100%; height: 600px;">
+        <iframe 
+          src="https://www.coinglass.com/LiquidityHeatmap" 
+          style="width: 100%; height: 100%; border: none;"
+          title="Coinglass Liquidity Heatmap">
+        </iframe>
+      </div>
     </div>
     
-    <script src="https://d3js.org/d3.v7.min.js"></script>
     <script>
-      // OrderBook state
-      let orderBook = {
-        asks: new Map(),
-        bids: new Map(),
-        lastUpdateId: 0
-      };
 
       // Time-based binning state
       let timeBasedBins = new Map();
@@ -469,25 +467,9 @@
       // Initialize everything when DOM is ready
       document.addEventListener('DOMContentLoaded', () => {
         console.log('DOM Content loaded, initializing...');
-        
-        // Add canvas overlay to chart container
-        const chartContainer = document.querySelector('#tradingview_btc').parentElement;
-        chartContainer.appendChild(canvas);
-        
-        // Resize canvas to match container
-        const resizeCanvas = () => {
-          canvas.width = chartContainer.clientWidth;
-          canvas.height = chartContainer.clientHeight;
-        };
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
-        
-        // Start data polling
-        pollOrderBook();
+        // Start market data polling
         updateMarketData();
-        
-        // Set up polling intervals
-        setInterval(pollOrderBook, 5000);
+        // Set up polling interval for market data
         setInterval(updateMarketData, 10000);
       });
     </script>
