@@ -204,9 +204,21 @@
             .range([0, canvas.width]);
 
           // Create color scale (purple to green/yellow)
-          const colorScale = d3.scaleSequential()
-            .domain([0, Math.max(...allOrders.map(order => order.size))])
-            .interpolator(d3.interpolateHsl("#540D6E", "#F6FF00"));
+          const maxSize = Math.max(...allOrders.map(order => order.size));
+          const colorScaleLow = d3.scaleLinear()
+            .domain([0, maxSize * 0.5])
+            .range(["#540D6E", "#14FFEC"]);
+          const colorScaleHigh = d3.scaleLinear()
+            .domain([maxSize * 0.5, maxSize])
+            .range(["#14FFEC", "#F6FF00"]);
+          
+          const getColor = (size) => {
+            return size <= maxSize * 0.5 ? colorScaleLow(size) : colorScaleHigh(size);
+          };
+          
+          const logScale = d3.scaleLog()
+            .domain([1, maxSize])
+            .range([0.2, 0.8]);
 
           // Aggregate orders into price bins
           const binSize = (priceRange.max - priceRange.min) / 100; // 100 price levels
@@ -235,18 +247,23 @@
             
             // Draw asks (top half)
             const askGradient = ctx.createLinearGradient(0, 0, 0, canvas.height/2);
-            askGradient.addColorStop(0, colorScale(volumes.asks));
-            askGradient.addColorStop(1, 'rgba(84, 13, 110, 0)'); // Fade to transparent
+            const askAlpha = volumes.asks > 0 ? logScale(volumes.asks) : 0;
+            askGradient.addColorStop(0, getColor(volumes.asks));
+            askGradient.addColorStop(0.7, `rgba(84, 13, 110, ${askAlpha * 0.7})`);
+            askGradient.addColorStop(1, 'rgba(84, 13, 110, 0)');
             
-            ctx.globalAlpha = 0.6;
+            ctx.globalAlpha = askAlpha;
             ctx.fillStyle = askGradient;
             ctx.fillRect(x, 0, rectWidth, canvas.height/2);
             
             // Draw bids (bottom half)
             const bidGradient = ctx.createLinearGradient(0, canvas.height/2, 0, canvas.height);
-            bidGradient.addColorStop(0, 'rgba(84, 13, 110, 0)'); // Fade to transparent
-            bidGradient.addColorStop(1, colorScale(volumes.bids));
+            const bidAlpha = volumes.bids > 0 ? logScale(volumes.bids) : 0;
+            bidGradient.addColorStop(0, 'rgba(84, 13, 110, 0)');
+            bidGradient.addColorStop(0.3, `rgba(84, 13, 110, ${bidAlpha * 0.7})`);
+            bidGradient.addColorStop(1, getColor(volumes.bids));
             
+            ctx.globalAlpha = bidAlpha;
             ctx.fillStyle = bidGradient;
             ctx.fillRect(x, canvas.height/2, rectWidth, canvas.height/2);
           });
