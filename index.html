@@ -66,60 +66,51 @@
       let orderBook = {
         asks: new Map(),
         bids: new Map(),
-        sequence: 0
+        lastUpdateId: 0
       };
+
+      // Time-based binning state
+      let timeBasedBins = new Map();
+      const BIN_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+      const BINS_TO_KEEP = 12; // Keep last hour of data
 
       // Initialize WebSocket connection
       async function initWebSocket() {
         try {
-          // Get initial snapshot
-          const response = await fetch("https://api.allorigins.win/raw?url=" + 
-            encodeURIComponent("https://api.kucoin.com/api/v1/market/orderbook/level2_100?symbol=BTC-USDT"));
+          // Get initial snapshot from Binance
+          const response = await fetch('https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=1000');
           const snapshot = await response.json();
           
           // Initialize order book with snapshot
-          orderBook.sequence = parseInt(snapshot.data.sequence);
+          orderBook.lastUpdateId = snapshot.lastUpdateId;
           orderBook.asks.clear();
           orderBook.bids.clear();
           
-          snapshot.data.asks.forEach(([price, size]) => {
+          snapshot.asks.forEach(([price, size]) => {
             orderBook.asks.set(price, parseFloat(size));
           });
           
-          snapshot.data.bids.forEach(([price, size]) => {
+          snapshot.bids.forEach(([price, size]) => {
             orderBook.bids.set(price, parseFloat(size));
           });
 
-          // Get WebSocket token and endpoint
-          const tokenResponse = await fetch("https://api.allorigins.win/raw?url=" + 
-            encodeURIComponent("https://api.kucoin.com/api/v1/bullet-public"));
-          const tokenData = await tokenResponse.json();
-          const token = tokenData.data.token;
-          const wsEndpoint = tokenData.data.instanceServers[0].endpoint;
-          
           // Close existing WebSocket if any
           if (ws) {
             ws.close();
           }
           
-          // Connect to WebSocket
-          ws = new WebSocket(`${wsEndpoint}?token=${token}`);
+          // Connect to Binance WebSocket
+          ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@depth@100ms');
           
           ws.onopen = () => {
-            console.log('WebSocket connected');
-            // Subscribe to level2 market data
-            ws.send(JSON.stringify({
-              "id": Date.now(),
-              "type": "subscribe",
-              "topic": "/market/level2:BTC-USDT",
-              "response": true
-            }));
+            console.log('WebSocket connected to Binance');
+            initTimeBins();
           };
           
           ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            if (data.type === 'message' && data.subject === 'trade.l2update') {
-              handleOrderBookUpdate(data.data);
+            if (data.u > orderBook.lastUpdateId) {
+              handleOrderBookUpdate(data);
             }
           };
           
@@ -141,33 +132,75 @@
         }
       }
 
+      // Initialize time-based bins
+      function initTimeBins() {
+        const now = Date.now();
+        const currentBin = Math.floor(now / BIN_INTERVAL) * BIN_INTERVAL;
+        
+        timeBasedBins.clear();
+        for (let i = 0; i < BINS_TO_KEEP; i++) {
+          const binTime = currentBin - (i * BIN_INTERVAL);
+          timeBasedBins.set(binTime, {
+            asks: new Map(),
+            bids: new Map()
+          });
+        }
+      }
+
       // Handle order book updates
       function handleOrderBookUpdate(update) {
-        if (update.sequenceStart <= orderBook.sequence + 1) {
-          // Process asks
-          update.changes.asks.forEach(([price, size]) => {
-            if (parseFloat(size) === 0) {
-              orderBook.asks.delete(price);
-            } else {
-              orderBook.asks.set(price, parseFloat(size));
-            }
+        // Process asks
+        update.a.forEach(([price, size]) => {
+          if (parseFloat(size) === 0) {
+            orderBook.asks.delete(price);
+          } else {
+            orderBook.asks.set(price, parseFloat(size));
+          }
+        });
+        
+        // Process bids
+        update.b.forEach(([price, size]) => {
+          if (parseFloat(size) === 0) {
+            orderBook.bids.delete(price);
+          } else {
+            orderBook.bids.set(price, parseFloat(size));
+          }
+        });
+        
+        // Update lastUpdateId
+        orderBook.lastUpdateId = update.u;
+        
+        // Update time-based bins
+        const now = Date.now();
+        const currentBin = Math.floor(now / BIN_INTERVAL) * BIN_INTERVAL;
+        
+        // Create new bin if needed
+        if (!timeBasedBins.has(currentBin)) {
+          timeBasedBins.set(currentBin, {
+            asks: new Map(),
+            bids: new Map()
           });
           
-          // Process bids
-          update.changes.bids.forEach(([price, size]) => {
-            if (parseFloat(size) === 0) {
-              orderBook.bids.delete(price);
-            } else {
-              orderBook.bids.set(price, parseFloat(size));
-            }
-          });
-          
-          orderBook.sequence = update.sequenceEnd;
-          drawHeatmap();
-        } else {
-          // Sequence broken, reinitialize
-          initWebSocket();
+          // Remove oldest bin
+          const oldestBinTime = currentBin - (BINS_TO_KEEP * BIN_INTERVAL);
+          timeBasedBins.delete(oldestBinTime);
         }
+        
+        // Aggregate current order book into current time bin
+        const currentBinData = timeBasedBins.get(currentBin);
+        
+        orderBook.asks.forEach((size, price) => {
+          const currentSize = currentBinData.asks.get(price) || 0;
+          currentBinData.asks.set(price, currentSize + size);
+        });
+        
+        orderBook.bids.forEach((size, price) => {
+          const currentSize = currentBinData.bids.get(price) || 0;
+          currentBinData.bids.set(price, currentSize + size);
+        });
+        
+        // Draw updated heatmap
+        drawHeatmap();
       }
 
       function drawHeatmap() {
@@ -280,21 +313,27 @@
       // Market Data Functions
       async function updateMarketData() {
         try {
-          // Fetch data from Binance API
+          // Fetch data from Binance API with better CORS proxy
           const [volumeRes, oiRes] = await Promise.all([
-            fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')),
-            fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=5m&limit=1'))
+            fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')),
+            fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent('https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=5m&limit=1'))
           ]);
 
           const volumeData = await volumeRes.json();
           const oiData = await oiRes.json();
 
-          // Format and display volume
+          // Validate and format volume data
+          if (!volumeData || !volumeData.volume || !volumeData.lastPrice) {
+            throw new Error('Invalid volume data structure');
+          }
           const volume = parseFloat(volumeData.volume * volumeData.lastPrice);
           document.getElementById('volVal').textContent = '$' + (volume / 1e9).toFixed(2) + 'B';
 
-          // Format and display open interest
-          const oi = parseFloat(oiData[0].sumOpenInterest * oiData[0].sumOpenInterestValue);
+          // Validate and format open interest data
+          if (!oiData || !Array.isArray(oiData) || oiData.length === 0 || !oiData[0].sumOpenInterest) {
+            throw new Error('Invalid open interest data structure');
+          }
+          const oi = parseFloat(oiData[0].sumOpenInterest);
           document.getElementById('oiVal').textContent = '$' + (oi / 1e9).toFixed(2) + 'B';
 
           // Simulate liquidation and L/S ratio (as these require paid API access)
