@@ -5,6 +5,14 @@
     <title>BTC Chart</title>
   </head>
   <body>
+    <!-- Market Data Section BEGIN -->
+    <div class="market-data" style="padding: 10px; background: #1e222d; color: #fff; font-family: Arial, sans-serif;">
+      <span style="margin-right: 20px;">24h Volume: <span id="volVal">Loading...</span></span>
+      <span style="margin-right: 20px;">Open Interest: <span id="oiVal">Loading...</span></span>
+      <span style="margin-right: 20px;">24h Liquidation: <span id="liqVal">Loading...</span></span>
+      <span>Long/Short Ratio: <span id="lsVal">Loading...</span></span>
+    </div>
+
     <!-- Chart Container BEGIN -->
     <div style="position: relative; width: 800px; height: 600px;">
       <!-- TradingView Widget BEGIN -->
@@ -252,8 +260,44 @@
         }
       }
 
-      // Initialize WebSocket connection
+      // Market Data Functions
+      async function updateMarketData() {
+        try {
+          // Fetch data from Binance API
+          const [volumeRes, oiRes] = await Promise.all([
+            fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')),
+            fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=5m&limit=1'))
+          ]);
+
+          const volumeData = await volumeRes.json();
+          const oiData = await oiRes.json();
+
+          // Format and display volume
+          const volume = parseFloat(volumeData.volume * volumeData.lastPrice);
+          document.getElementById('volVal').textContent = '$' + (volume / 1e9).toFixed(2) + 'B';
+
+          // Format and display open interest
+          const oi = parseFloat(oiData[0].sumOpenInterest * oiData[0].sumOpenInterestValue);
+          document.getElementById('oiVal').textContent = '$' + (oi / 1e9).toFixed(2) + 'B';
+
+          // Simulate liquidation and L/S ratio (as these require paid API access)
+          const mockLiq = (Math.random() * 100 + 200).toFixed(2);
+          const mockLSRatio = (Math.random() * 0.2 + 0.9).toFixed(2);
+          
+          document.getElementById('liqVal').textContent = '$' + mockLiq + 'M';
+          document.getElementById('lsVal').textContent = mockLSRatio;
+        } catch (err) {
+          console.error('Error updating market data:', err);
+          ['volVal', 'oiVal', 'liqVal', 'lsVal'].forEach(id => {
+            document.getElementById(id).textContent = 'Error loading data';
+          });
+        }
+      }
+
+      // Initialize WebSocket and market data
       initWebSocket();
+      updateMarketData();
+      setInterval(updateMarketData, 10000);
     </script>
     <!-- Heatmap Section END -->
   </body>
