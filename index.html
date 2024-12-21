@@ -55,11 +55,13 @@
       <!-- TradingView Widget END -->
       
       <!-- Coinglass Heatmap BEGIN -->
-      <div style="width: 100%; height: 600px;">
+      <div style="width: 100%; height: 600px; position: relative;">
         <iframe 
-          src="https://www.coinglass.com/LiquidityHeatmap" 
-          style="width: 100%; height: 100%; border: none;"
-          title="Coinglass Liquidity Heatmap">
+          src="https://www.coinglass.com/widgets/LiquidityHeatmap?symbol=BTCUSDT&theme=dark&chart_only=true" 
+          style="width: 100%; height: 100%; border: none; background: #1e222d;"
+          title="Coinglass Liquidity Heatmap"
+          scrolling="no"
+          allowtransparency="true">
         </iframe>
       </div>
     </div>
@@ -401,56 +403,40 @@
         }
       }
       
-      // Start polling
-      pollOrderBook();
+      // Initialize and start polling market data
       updateMarketData();
-      
-      // Poll every 5 seconds for order book
-      setInterval(pollOrderBook, 5000);
-      // Poll every 10 seconds for market data
       setInterval(updateMarketData, 10000);
     </script>
     <script>
-      // Initialize canvas for heatmap overlay
-      const canvas = document.createElement('canvas');
-      canvas.id = 'heatmapOverlay';
-      canvas.style.position = 'absolute';
-      canvas.style.top = '0';
-      canvas.style.left = '0';
-      canvas.style.width = '100%';
-      canvas.style.height = '100%';
-      canvas.style.pointerEvents = 'none';
-      
-      // Initialize order book state
-      const orderBook = {
-        asks: new Map(),
-        bids: new Map(),
-        timeData: new Map(),
-        maxVolume: 0
-      };
-      
-      function renderHeatmap() {
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Get current price from TradingView widget
-        const currentPrice = parseFloat(document.querySelector('[data-name="legend-price-value"]')?.textContent) || 0;
-        const priceRange = currentPrice * 0.1; // 10% range
-        
-        // Calculate volume ranges for color scaling
-        const volumes = Array.from(orderBook.timeData.values());
-        const maxVolume = Math.max(...volumes, 1);
-        orderBook.maxVolume = Math.max(orderBook.maxVolume, maxVolume);
-        
-        // Draw heatmap
-        orderBook.timeData.forEach((volume, key) => {
-          const [timestamp, price] = key.split('_').map(Number);
-          const age = Date.now() - timestamp;
-          const alpha = Math.max(0, 1 - age / (5 * 60 * 1000)); // Fade over 5 minutes
+      // Initialize market data updates
+      async function updateMarketData() {
+        try {
+          // Fetch data from Binance API
+          const volumeRes = await fetch('https://api.codetabs.com/v1/proxy?quest=' + 
+            encodeURIComponent('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT'));
+          const volumeData = await volumeRes.json();
+
+          // Update volume
+          if (volumeData && volumeData.volume && volumeData.lastPrice) {
+            const volume = parseFloat(volumeData.volume * volumeData.lastPrice);
+            document.getElementById('volume').textContent = '$' + (volume / 1e9).toFixed(2) + 'B';
+          }
+
+          // Simulate other metrics (as they require paid API access)
+          const mockOI = (Math.random() * 5 + 10).toFixed(2);
+          const mockLiq = (Math.random() * 100 + 200).toFixed(2);
+          const mockLSRatio = (Math.random() * 0.2 + 0.9).toFixed(2);
           
-          // Calculate relative position
-          const relativePrice = (price - currentPrice) / priceRange;
-          const y = canvas.height * (0.5 - relativePrice * 0.5);
+          document.getElementById('openInterest').textContent = '$' + mockOI + 'B';
+          document.getElementById('liquidation').textContent = '$' + mockLiq + 'M';
+          document.getElementById('longShortRatio').textContent = mockLSRatio;
+        } catch (err) {
+          console.error('Error updating market data:', err);
+          ['volume', 'openInterest', 'liquidation', 'longShortRatio'].forEach(id => {
+            document.getElementById(id).textContent = 'Error loading data';
+          });
+        }
+      }
           
           // Calculate color intensity based on volume
           const intensity = Math.log(volume + 1) / Math.log(orderBook.maxVolume + 1);
