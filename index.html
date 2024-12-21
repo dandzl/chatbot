@@ -412,159 +412,16 @@
       // Poll every 10 seconds for market data
       setInterval(updateMarketData, 10000);
     </script>
-    <!-- Heatmap Section END -->
     <script>
-      // Debug logging
-      console.log('Script loaded and executing...');
-      
-      // Initialize data structures
-      const orderBook = {
-        asks: new Map(),
-        bids: new Map(),
-        timeData: new Map() // Store time-based aggregates
-      };
-      
-      // Verify DOM is ready
+      // Initialize everything when DOM is ready
       document.addEventListener('DOMContentLoaded', () => {
-        console.log('DOM Content loaded, initializing data fetching...');
+        console.log('DOM Content loaded, initializing...');
+        initOrderBook();
+        updateMarketData();
         
-        // Initialize order book and market data with polling
-        let lastUpdateId = 0;
-        let lastPollTime = Date.now();
-        const FIVE_MINUTES = 5 * 60 * 1000;
-        
-        // Aggregate orders into 5-minute bins
-        function aggregateOrders(orders, timestamp) {
-          const binStart = Math.floor(timestamp / FIVE_MINUTES) * FIVE_MINUTES;
-          
-          orders.forEach(([price, size]) => {
-            price = parseFloat(price);
-            size = parseFloat(size);
-            
-            const key = `${binStart}_${price.toFixed(1)}`;
-            const currentSize = orderBook.timeData.get(key) || 0;
-            orderBook.timeData.set(key, currentSize + size);
-          });
-          
-          // Clean up old data
-          const oldestValidTime = timestamp - FIVE_MINUTES;
-          for (const [key] of orderBook.timeData) {
-            const [binTime] = key.split('_');
-            if (parseInt(binTime) < oldestValidTime) {
-              orderBook.timeData.delete(key);
-            }
-          }
-        }
-        
-        async function pollOrderBook() {
-          try {
-            console.log('Polling order book...');
-            const timestamp = Date.now();
-            
-            const response = await fetch('https://api.codetabs.com/v1/proxy?quest=' + 
-              encodeURIComponent(`https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=1000`));
-            
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            console.log('Received order book data:', {
-              asks: data.asks?.length || 0,
-              bids: data.bids?.length || 0,
-              lastUpdateId: data.lastUpdateId
-            });
-            
-            if (data.lastUpdateId <= lastUpdateId) {
-              console.log('Skipping older update:', { lastUpdateId, newUpdateId: data.lastUpdateId });
-              return;
-            }
-            
-            // Clear existing order book
-            orderBook.asks.clear();
-            orderBook.bids.clear();
-            
-            // Process new snapshot and aggregate into time bins
-            if (Array.isArray(data.asks) && Array.isArray(data.bids)) {
-              aggregateOrders(data.asks, timestamp);
-              aggregateOrders(data.bids, timestamp);
-              
-              data.asks.forEach(([price, size]) => {
-                orderBook.asks.set(parseFloat(price), parseFloat(size));
-              });
-              
-              data.bids.forEach(([price, size]) => {
-                orderBook.bids.set(parseFloat(price), parseFloat(size));
-              });
-              
-              lastUpdateId = data.lastUpdateId;
-              lastPollTime = timestamp;
-              
-              // Update visualization
-              renderHeatmap();
-            } else {
-              console.error('Invalid order book data structure:', data);
-            }
-          } catch (err) {
-            console.error('Error polling order book:', err);
-          }
-        }
-        
-        async function updateMarketData() {
-          try {
-            console.log('Updating market data...');
-            const [volumeRes, oiRes] = await Promise.all([
-              fetch('https://api.codetabs.com/v1/proxy?quest=' + 
-                encodeURIComponent('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')),
-              fetch('https://api.codetabs.com/v1/proxy?quest=' + 
-                encodeURIComponent('https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=5m&limit=1'))
-            ]);
-            
-            if (!volumeRes.ok || !oiRes.ok) {
-              throw new Error('Failed to fetch market data');
-            }
-            
-            const volumeData = await volumeRes.json();
-            const oiData = await oiRes.json();
-            
-            console.log('Received market data:', { volumeData, oiData });
-            
-            // Update DOM elements with proper error handling
-            const volumeEl = document.getElementById('volume');
-            const oiEl = document.getElementById('openInterest');
-            const liqEl = document.getElementById('liquidation');
-            const ratioEl = document.getElementById('longShortRatio');
-            
-            if (volumeEl && volumeData.volume && volumeData.lastPrice) {
-              volumeEl.textContent = '$' + ((volumeData.volume * volumeData.lastPrice) / 1e9).toFixed(2) + 'B';
-            }
-            
-            if (oiEl && oiData[0]?.sumOpenInterest) {
-              oiEl.textContent = '$' + (oiData[0].sumOpenInterest / 1e9).toFixed(2) + 'B';
-            }
-            
-            if (liqEl) {
-              liqEl.textContent = '$' + ((Math.random() * 100 + 200).toFixed(2)) + 'M';
-            }
-            
-            if (ratioEl) {
-              ratioEl.textContent = (Math.random() * 0.2 + 0.9).toFixed(2);
-            }
-          } catch (err) {
-            console.error('Error updating market data:', err);
-          }
-        }
-        
-        // Start polling with initial delay to ensure DOM is ready
-        setTimeout(() => {
-          pollOrderBook();
-          updateMarketData();
-          
-          // Poll every 5 seconds for order book
-          setInterval(pollOrderBook, 5000);
-          // Poll every 10 seconds for market data
-          setInterval(updateMarketData, 10000);
-        }, 1000);
+        // Set up polling intervals
+        setInterval(pollOrderBook, 5000);
+        setInterval(updateMarketData, 10000);
       });
     </script>
   </body>
