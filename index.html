@@ -24,5 +24,90 @@
       });
     </script>
     <!-- TradingView Widget END -->
+    
+    <!-- Heatmap Section BEGIN -->
+    <div id="heatmap" style="margin-top: 50px;"></div>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+      async function drawHeatmap() {
+        try {
+          // Fetching order book data from KuCoin through CORS proxy
+          const response = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent("https://api.kucoin.com/api/v1/market/orderbook/level2_100?symbol=BTC-USDT"));
+          const data = await response.json();
+
+          // Extract bids and asks from the response
+          const bids = data.data.bids.map(([p, s]) => ({price: +p, size: +s}));
+          const asks = data.data.asks.map(([p, s]) => ({price: +p, size: +s}));
+
+          // Combine and label bids/asks
+          const allOrders = bids.map(d => ({...d, type: "bid"}))
+            .concat(asks.map(d => ({...d, type: "ask"})));
+
+          // Create scales for price and size
+          const priceExtent = d3.extent(allOrders, d => d.price);
+          const sizeExtent = d3.extent(allOrders, d => d.size);
+
+          const width = 800, height = 400;
+          const margin = {top: 10, right: 30, bottom: 30, left: 50};
+
+          // Clear any existing SVG
+          d3.select("#heatmap").selectAll("svg").remove();
+
+          const svg = d3.select("#heatmap")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+          // Draw rectangles for each price level
+          const xScale = d3.scaleLinear()
+            .domain(priceExtent)
+            .range([margin.left, width - margin.right]);
+
+          const colorScale = d3.scaleSequential(d3.interpolateYlOrRd)
+            .domain(sizeExtent);
+
+          // Add axes
+          const xAxis = d3.axisBottom(xScale)
+            .tickFormat(d => d.toFixed(1));
+
+          svg.append("g")
+            .attr("transform", `translate(0,${height - margin.bottom})`)
+            .call(xAxis)
+            .append("text")
+            .attr("x", width / 2)
+            .attr("y", 25)
+            .attr("fill", "black")
+            .text("Price (USDT)");
+
+          // Draw the heatmap rectangles
+          svg.selectAll("rect")
+            .data(allOrders)
+            .enter()
+            .append("rect")
+            .attr("x", d => xScale(d.price))
+            .attr("y", d => d.type === "bid" ? height/2 : height/4)
+            .attr("width", 2)
+            .attr("height", d => d.type === "bid" ? height/2 - margin.bottom : height/4 - margin.bottom)
+            .attr("fill", d => colorScale(d.size))
+            .append("title")
+            .text(d => `Price: ${d.price}\nSize: ${d.size}\nType: ${d.type}`);
+
+        } catch (err) {
+          console.error("Error fetching or rendering heatmap data:", err);
+          // Display error message in the heatmap container
+          d3.select("#heatmap")
+            .append("div")
+            .style("color", "red")
+            .text("Error loading heatmap data. Please check console for details.");
+        }
+      }
+
+      // Initial draw
+      drawHeatmap();
+
+      // Update every 10 seconds
+      setInterval(drawHeatmap, 10000);
+    </script>
+    <!-- Heatmap Section END -->
   </body>
 </html>
