@@ -77,8 +77,9 @@
       // Initialize WebSocket connection
       async function initWebSocket() {
         try {
-          // Get initial snapshot from Binance
-          const response = await fetch('https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=1000');
+          // Get initial snapshot from Binance using CORS proxy
+          const response = await fetch('https://api.codetabs.com/v1/proxy?quest=' + 
+            encodeURIComponent('https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=1000'));
           const snapshot = await response.json();
           
           // Initialize order book with snapshot
@@ -99,8 +100,8 @@
             ws.close();
           }
           
-          // Connect to Binance WebSocket
-          ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@depth@100ms');
+          // Connect to Binance WebSocket via proxy
+          ws = new WebSocket('wss://api.codetabs.com/v1/proxy/wss://stream.binance.com:9443/ws/btcusdt@depth@100ms');
           
           ws.onopen = () => {
             console.log('WebSocket connected to Binance');
